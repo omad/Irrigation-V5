@@ -30,14 +30,12 @@ class IrrigationCard extends HTMLElement {
     config.card.show_header_toggle = false;
     config.card.state_color = true;
     let doErrors = [];
-    let validconfig = "invalid";
 
     let zones = [];
     let entities = [];
 
     const x = hass.states[config.program];
     if (!x) {
-      validconfig = "invalid";
       doErrors.push({
         type: "section",
         label: "Program: Select a program",
@@ -429,7 +427,7 @@ class IrrigationCardEditor extends HTMLElement {
     }
 
     //if new card
-    if (!this._config.program) {
+    if (!this._config.program || this._config.program.length === 0) {
       let x = "           "
       let newOption = new Option(x, x);
       select.add(newOption);
@@ -453,6 +451,7 @@ class IrrigationCardEditor extends HTMLElement {
     if (!this._hass?.states[program]?.attributes?.["zones"]) {
       return;
     }
+    entities = Array.isArray(entities) ? entities : [];
     // build the list of zones in the program
     // console.log("do build entity options")
     //var zones = Number(this._hass.states[program].attributes["zone_count"]);
@@ -491,7 +490,6 @@ class IrrigationCardEditor extends HTMLElement {
     this.doBuildProgramOptions(this._config.program);
     this._elements.show_program.checked = this._config.show_program;
     if (this._elements.program.value.split(".")[0] == "switch") {
-      this._elements.entities.value = this._config.entities;
       this.doBuildEntityOptions(
         this._elements.program.value,
         this._config.entities

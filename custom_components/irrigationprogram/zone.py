@@ -233,7 +233,7 @@ class Zone(SwitchEntity, RestoreEntity):
 
     @property
     def frequency(self) -> int | str | None:
-        """Frequency entity select."""
+        """Return the effective zone frequency value."""
         # manage the impact of the rain delay on frequency
         delay = 0
         if (
