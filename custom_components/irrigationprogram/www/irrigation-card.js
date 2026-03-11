@@ -10,9 +10,11 @@ class IrrigationCard extends HTMLElement {
     const element = document.createElement('hui-entities-card');
     this._config = JSON.parse(JSON.stringify(cardConfig));
     customElements.whenDefined("card-mod").then(() => {
-      customElements
-        .get("card-mod")
-        .applyToElement(element, "card-mod-card", this._config.card_mod.style);
+      if (this._config.card_mod?.style) {
+        customElements
+          .get("card-mod")
+          .applyToElement(element, "card-mod-card", this._config.card_mod.style);
+      }
     });
     this.appendChild(element);
   }
@@ -35,14 +37,18 @@ class IrrigationCard extends HTMLElement {
 
     const x = hass.states[config.program];
     if (!x) {
-      validconfig == "invalid";
+      validconfig = "invalid";
       doErrors.push({
         type: "section",
         label: "Program: Select a program",
       });
+      config.card.entities = doErrors;
+      this.lastElementChild.setConfig(config.card);
+      this.lastElementChild.hass = hass;
+      return;
     }
 
-    if (!hass.states[config.program].attributes["zones"]) {
+    if (!x.attributes["zones"]) {
       doErrors.push({
         type: "section",
         label: "Refresh screen (F5)",
@@ -181,6 +187,13 @@ class IrrigationCard extends HTMLElement {
 
       // Process zone
       function AddZone(zone, first_zone) {
+        if (!hass.states[zone]) {
+          entities.push({
+            type: "section",
+            label: `Zone unavailable: ${zone}`,
+          });
+          return;
+        }
 
         //Add a section break
         if (config.show_program === false && first_zone && !config.title) {
@@ -330,12 +343,17 @@ class IrrigationCardEditor extends HTMLElement {
   setConfig(config) {
     // console.log("editor:setConfig()");
     this._config = config;
-    this.doUpdateConfig();
+    if (this._hass) {
+      this.doUpdateConfig();
+    }
   }
 
   set hass(hass) {
     // console.log("editor.hass()");
     this._hass = hass;
+    if (this._config) {
+      this.doUpdateConfig();
+    }
     this.doUpdateHass();
   }
 
@@ -398,6 +416,9 @@ class IrrigationCardEditor extends HTMLElement {
   }
 
   doBuildProgramOptions(program) {
+    if (!this._hass || !this._config) {
+      return;
+    }
     // build the list of available programs
     var select = this._elements.program;
     // remove the existing list
@@ -408,7 +429,7 @@ class IrrigationCardEditor extends HTMLElement {
     }
 
     //if new card
-    if (this._config.program.length == 0) {
+    if (!this._config.program) {
       let x = "           "
       let newOption = new Option(x, x);
       select.add(newOption);
@@ -429,6 +450,9 @@ class IrrigationCardEditor extends HTMLElement {
   }
 
   doBuildEntityOptions(program, entities) {
+    if (!this._hass?.states[program]?.attributes?.["zones"]) {
+      return;
+    }
     // build the list of zones in the program
     // console.log("do build entity options")
     //var zones = Number(this._hass.states[program].attributes["zone_count"]);
@@ -445,6 +469,9 @@ class IrrigationCardEditor extends HTMLElement {
 
     for (i = 0; i < l; i++) {
       var zone = zones[i]
+      if (!this._hass.states[zone]) {
+        continue;
+      }
       var friendly_name = this._hass.states[zone].attributes["friendly_name"];
       var zone_name = this._hass.states[zone].entity_id;
 
@@ -457,11 +484,14 @@ class IrrigationCardEditor extends HTMLElement {
   }
 
   doUpdateConfig() {
+    if (!this._hass || !this._config) {
+      return;
+    }
     // Build values on load
     this.doBuildProgramOptions(this._config.program);
     this._elements.show_program.checked = this._config.show_program;
     if (this._elements.program.value.split(".")[0] == "switch") {
-      this._elements.entities.value = this._hass.config["entities"];
+      this._elements.entities.value = this._config.entities;
       this.doBuildEntityOptions(
         this._elements.program.value,
         this._config.entities

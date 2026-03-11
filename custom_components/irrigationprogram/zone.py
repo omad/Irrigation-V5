@@ -232,13 +232,19 @@ class Zone(SwitchEntity, RestoreEntity):
         return 1
 
     @property
-    def frequency(self) -> SensorEntity:
+    def frequency(self) -> int | str | None:
         """Frequency entity select."""
         # manage the impact of the rain delay on frequency
         delay = 0
-        if self._programdata.rain_delay:
-            if self._programdata.rain_delay.state == CONST_ON:
+        if (
+            self._programdata.rain_delay
+            and self._programdata.rain_delay_days
+            and self._programdata.rain_delay.state == CONST_ON
+        ):
+            try:
                 delay = int(self._programdata.rain_delay_days.state)
+            except (TypeError, ValueError):
+                delay = 0
 
         if self._zonedata.frequency:
             frq = self._zonedata.frequency.current_option

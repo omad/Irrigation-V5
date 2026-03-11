@@ -601,7 +601,7 @@ def migrate_5(hass: HomeAssistant, config_entry: ConfigEntry):
     new[ATTR_ZONES] = newzones
 
     # create the persistent notification
-    async_dismiss("irrigation_card")
+    async_dismiss(hass, "irrigation_card")
     async_create(
         hass,
         message=msg,
