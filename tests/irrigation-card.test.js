@@ -51,6 +51,7 @@ class FakeEntitiesCard extends FakeHTMLElement {
 
 function buildEnvironment({ useHelpers = true } = {}) {
   const registry = new Map();
+  const appliedCardMod = [];
 
   const customElements = {
     define(name, klass) {
@@ -69,7 +70,9 @@ function buildEnvironment({ useHelpers = true } = {}) {
 
   registry.set("hui-entities-card", FakeEntitiesCard);
   registry.set("card-mod", class {
-    static applyToElement() {}
+    static applyToElement(element, type, style) {
+      appliedCardMod.push({ element, type, style });
+    }
   });
 
   const document = {
@@ -115,6 +118,8 @@ function buildEnvironment({ useHelpers = true } = {}) {
 
   return {
     IrrigationCard: customElements.get("irrigation-card"),
+    appliedCardMod,
+    context,
   };
 }
 
@@ -207,6 +212,38 @@ test("handles partial zone attribute data without throwing", async () => {
 
   assert.ok(Array.isArray(card._cardElement.config.entities));
   assert.equal(card.getCardSize(), 7);
+});
+
+test("passes card-mod config through to the inner card and applies it safely", async () => {
+  const { IrrigationCard, appliedCardMod } = buildEnvironment();
+  const card = new IrrigationCard();
+
+  card.setConfig({
+    program: "switch.program",
+    entities: [],
+    show_program: true,
+    card: { type: "entities" },
+    card_mod: { style: "ha-card { border: none; }" },
+  });
+  card.hass = {
+    states: {
+      "switch.program": {
+        state: "off",
+        attributes: {
+          zones: [],
+          show_config: "switch.program_config",
+          irrigation_on: "switch.program_enabled",
+        },
+      },
+      "switch.program_config": { state: "off", attributes: {} },
+      "switch.program_enabled": { state: "on", attributes: {} },
+    },
+  };
+
+  await flushAsyncWork();
+
+  assert.equal(card._cardElement.config.card_mod.style, "ha-card { border: none; }");
+  assert.ok(appliedCardMod.some((entry) => entry.type === "card-mod-card"));
 });
 
 test("ignores stale async renders so settings rows can appear after toggle", async () => {
@@ -326,4 +363,63 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
         )
     )
   );
+});
+
+test("script tolerates pre-registered elements and existing customCards metadata", () => {
+  const registry = new Map();
+  registry.set("irrigation-card", FakeEntitiesCard);
+  registry.set("irrigation-card-editor", FakeEntitiesCard);
+  registry.set("hui-entities-card", FakeEntitiesCard);
+  registry.set("card-mod", class {
+    static applyToElement() {}
+  });
+
+  const customElements = {
+    define(name, klass) {
+      registry.set(name, klass);
+    },
+    get(name) {
+      return registry.get(name);
+    },
+    whenDefined(name) {
+      if (registry.has(name)) {
+        return Promise.resolve();
+      }
+      return Promise.reject(new Error(`Element not defined: ${name}`));
+    },
+  };
+
+  const context = {
+    HTMLElement: FakeHTMLElement,
+    customElements,
+    document: {
+      createElement(name) {
+        if (name === "hui-entities-card") {
+          return new FakeEntitiesCard();
+        }
+        return new FakeHTMLElement();
+      },
+    },
+    window: {
+      customCards: [{ type: "irrigation-card", name: "Irrigation Card" }],
+    },
+    console,
+    Event,
+    Option: class {
+      constructor(text, value) {
+        this.text = text;
+        this.value = value;
+        this.selected = false;
+      }
+    },
+  };
+
+  vm.createContext(context);
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "custom_components", "irrigationprogram", "www", "irrigation-card.js"),
+    "utf8"
+  );
+
+  assert.doesNotThrow(() => vm.runInContext(source, context));
+  assert.equal(context.window.customCards.filter((card) => card.type === "irrigation-card").length, 1);
 });

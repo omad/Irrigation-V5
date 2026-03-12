@@ -65,17 +65,11 @@ class IrrigationCard extends HTMLElement {
     }
     this._cardElement = element;
     this.appendChild(element);
-
-    customElements.whenDefined("card-mod").then(() => {
-      if (this._config?.card_mod?.style && this._cardElement) {
-        customElements
-          .get("card-mod")
-          .applyToElement(this._cardElement, "card-mod-card", this._config.card_mod.style);
-      }
-    });
+    this._applyCardModToElement();
   }
 
   _buildErrorCard(message, title = this._config?.title) {
+    const cardModConfig = this._normalizeCardModConfig();
     return {
       ...this._config.card,
       title,
@@ -85,6 +79,7 @@ class IrrigationCard extends HTMLElement {
       theme: this._config.theme,
       show_header_toggle: false,
       state_color: true,
+      ...(cardModConfig ? { card_mod: cardModConfig } : {}),
       entities: [
         {
           type: "section",
@@ -118,7 +113,10 @@ class IrrigationCard extends HTMLElement {
     config.card.theme = config.theme;
     config.card.show_header_toggle = false;
     config.card.state_color = true;
-    let doErrors = [];
+    const cardModConfig = this._normalizeCardModConfig();
+    if (cardModConfig) {
+      config.card.card_mod = cardModConfig;
+    }
 
     let zones = [];
     let entities = [];
@@ -148,6 +146,7 @@ class IrrigationCard extends HTMLElement {
     // console.log("call setConfig");
     card.setConfig(config.card);
     card.hass = this._hass;
+    this._applyCardModToElement();
 
     // Functions
 
@@ -435,6 +434,32 @@ class IrrigationCard extends HTMLElement {
   getCardSize() {
     return this._cardElement && "getCardSize" in this._cardElement ? this._cardElement.getCardSize() : 1;
   }
+
+  _normalizeCardModConfig() {
+    if (!this._config?.card_mod) {
+      return null;
+    }
+    return JSON.parse(JSON.stringify(this._config.card_mod));
+  }
+
+  _applyCardModToElement() {
+    const cardModConfig = this._normalizeCardModConfig();
+    if (!cardModConfig?.style || !this._cardElement) {
+      return;
+    }
+
+    customElements.whenDefined("card-mod").then(() => {
+      const cardMod = customElements.get("card-mod");
+      if (!cardMod?.applyToElement || !this._cardElement) {
+        return;
+      }
+      try {
+        cardMod.applyToElement(this._cardElement, "card-mod-card", cardModConfig.style);
+      } catch (error) {
+        console.warn("Irrigation Card: failed to apply card-mod", error);
+      }
+    }).catch(() => {});
+  }
 }
 
 class IrrigationCardEditor extends HTMLElement {
@@ -652,12 +677,18 @@ class IrrigationCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("irrigation-card-editor", IrrigationCardEditor);
-customElements.define("irrigation-card", IrrigationCard);
+if (!customElements.get("irrigation-card-editor")) {
+  customElements.define("irrigation-card-editor", IrrigationCardEditor);
+}
+if (!customElements.get("irrigation-card")) {
+  customElements.define("irrigation-card", IrrigationCard);
+}
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "irrigation-card",
-  name: "Irrigation Card",
-  preview: false, // Optional - defaults to false
-  description: "Custom card companion to Irrigation Custom Component", // Optional
-});
+if (!window.customCards.some((card) => card.type === "irrigation-card")) {
+  window.customCards.push({
+    type: "irrigation-card",
+    name: "Irrigation Card",
+    preview: false, // Optional - defaults to false
+    description: "Custom card companion to Irrigation Custom Component", // Optional
+  });
+}
