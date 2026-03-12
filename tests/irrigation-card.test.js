@@ -334,9 +334,6 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
     },
   };
 
-  await flushAsyncWork();
-  const initialInnerCard = card._cardElement;
-
   card.hass = {
     states: {
       "switch.program": {
@@ -357,7 +354,29 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
   helperReady.resolve();
   await flushAsyncWork();
 
+  const initialInnerCard = card._cardElement;
+  assert.equal(card.children.length, 1);
+
+  card.hass = {
+    states: {
+      "switch.program": {
+        state: "off",
+        attributes: {
+          zones: [],
+          show_config: "switch.program_config",
+          irrigation_on: "switch.program_enabled",
+          start_time: "input_datetime.program_start",
+        },
+      },
+      "switch.program_config": { state: "off", attributes: {} },
+      "switch.program_enabled": { state: "on", attributes: {} },
+      "input_datetime.program_start": { state: "06:00:00", attributes: {} },
+    },
+  };
+  await flushAsyncWork();
+
   assert.notEqual(card._cardElement, initialInnerCard);
+  assert.equal(card.children.length, 1);
   const conditionalRows = card._cardElement.config.entities.filter((entity) => entity.type === "conditional");
   assert.ok(
     conditionalRows.some(
@@ -367,6 +386,51 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
         )
     )
   );
+});
+
+test("repeated settings toggles do not duplicate inner card content", async () => {
+  const { IrrigationCard } = buildEnvironment();
+  const card = new IrrigationCard();
+
+  card.setConfig({
+    program: "switch.program",
+    entities: [],
+    show_program: true,
+    card: { type: "entities" },
+  });
+
+  const buildHass = (showConfigState) => ({
+    states: {
+      "switch.program": {
+        state: "off",
+        attributes: {
+          zones: [],
+          show_config: "switch.program_config",
+          irrigation_on: "switch.program_enabled",
+          start_time: "input_datetime.program_start",
+        },
+      },
+      "switch.program_config": { state: showConfigState, attributes: {} },
+      "switch.program_enabled": { state: "on", attributes: {} },
+      "input_datetime.program_start": { state: "06:00:00", attributes: {} },
+    },
+  });
+
+  card.hass = buildHass("off");
+  await flushAsyncWork();
+  assert.equal(card.children.length, 1);
+
+  card.hass = buildHass("on");
+  await flushAsyncWork();
+  assert.equal(card.children.length, 1);
+
+  card.hass = buildHass("off");
+  await flushAsyncWork();
+  assert.equal(card.children.length, 1);
+
+  card.hass = buildHass("on");
+  await flushAsyncWork();
+  assert.equal(card.children.length, 1);
 });
 
 test("script tolerates pre-registered elements and existing customCards metadata", () => {

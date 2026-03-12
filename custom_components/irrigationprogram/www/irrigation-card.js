@@ -40,6 +40,9 @@ class IrrigationCard extends HTMLElement {
   }
 
   async _recreateCardElement() {
+    if (this._cardElement && this.contains(this._cardElement)) {
+      this.removeChild(this._cardElement);
+    }
     this._cardElement = null;
     this._cardElementPromise = null;
     return this._ensureCardElement();
