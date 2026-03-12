@@ -6,6 +6,7 @@ class IrrigationCard extends HTMLElement {
     this._cardElement = null;
     this._cardElementPromise = null;
     this._renderVersion = 0;
+    this._cardConfigSignature = null;
   }
 
   setConfig(config) {
@@ -36,6 +37,12 @@ class IrrigationCard extends HTMLElement {
     this._cardElement = await this._cardElementPromise;
     this._cardElementPromise = null;
     return this._cardElement;
+  }
+
+  async _recreateCardElement() {
+    this._cardElement = null;
+    this._cardElementPromise = null;
+    return this._ensureCardElement();
   }
 
   async _createCardElement() {
@@ -95,15 +102,6 @@ class IrrigationCard extends HTMLElement {
     }
 
     const renderVersion = ++this._renderVersion;
-    const card = await this._ensureCardElement();
-    if (renderVersion !== this._renderVersion) {
-      return;
-    }
-    if (typeof card?.setConfig !== "function") {
-      console.warn("Irrigation Card: card element is not ready");
-      return;
-    }
-
     const config = JSON.parse(JSON.stringify(this._config));
     config.card.title = config.title;
     // https://www.home-assistant.io/lovelace/header-footer/
@@ -124,12 +122,20 @@ class IrrigationCard extends HTMLElement {
 
     const x = this._hass.states?.[config.program];
     if (!x) {
+      const card = await this._ensureCardElement();
+      if (renderVersion !== this._renderVersion) {
+        return;
+      }
       card.setConfig(this._buildErrorCard("Program unavailable or not selected"));
       card.hass = this._hass;
       return;
     }
 
     if (!x.attributes["zones"]) {
+      const card = await this._ensureCardElement();
+      if (renderVersion !== this._renderVersion) {
+        return;
+      }
       card.setConfig(
         this._buildErrorCard(
           "Program is still loading its card attributes",
@@ -143,7 +149,27 @@ class IrrigationCard extends HTMLElement {
       config.card.entities = doRenderProgram(this._hass);
       // console.log(config.card.entities)
     }
-    // console.log("call setConfig");
+
+    const nextSignature = JSON.stringify({
+      card: config.card,
+      stateSnapshot: this._buildRenderStateSnapshot(config),
+    });
+    let card = await this._ensureCardElement();
+    if (renderVersion !== this._renderVersion) {
+      return;
+    }
+    if (this._cardConfigSignature !== nextSignature) {
+      card = await this._recreateCardElement();
+      if (renderVersion !== this._renderVersion) {
+        return;
+      }
+      this._cardConfigSignature = nextSignature;
+    }
+    if (typeof card?.setConfig !== "function") {
+      console.warn("Irrigation Card: card element is not ready");
+      return;
+    }
+
     card.setConfig(config.card);
     card.hass = this._hass;
     this._applyCardModToElement();
@@ -440,6 +466,64 @@ class IrrigationCard extends HTMLElement {
       return null;
     }
     return JSON.parse(JSON.stringify(this._config.card_mod));
+  }
+
+  _buildRenderStateSnapshot(config) {
+    const entityIds = new Set();
+    const addEntityState = (entityId) => {
+      if (typeof entityId !== "string" || entityId.length === 0) {
+        return;
+      }
+      entityIds.add(entityId);
+    };
+
+    addEntityState(config.program);
+
+    const programState = this._hass?.states?.[config.program];
+    if (programState?.attributes) {
+      addEntityState(programState.attributes.show_config);
+      addEntityState(programState.attributes.irrigation_on);
+      addEntityState(programState.attributes.pause);
+      addEntityState(programState.attributes.remaining);
+      addEntityState(programState.attributes.start_time);
+      addEntityState(programState.attributes.default_run_time);
+      addEntityState(programState.attributes.run_freq);
+      addEntityState(programState.attributes.inter_zone_delay);
+      addEntityState(programState.attributes.enable_rain_delay);
+      addEntityState(programState.attributes.rain_delay_days);
+      addEntityState(programState.attributes.sunrise);
+      addEntityState(programState.attributes.sunset);
+    }
+
+    for (const zone of Array.isArray(config.entities) ? config.entities : []) {
+      addEntityState(zone);
+      const zoneState = this._hass?.states?.[zone];
+      if (!zoneState?.attributes) {
+        continue;
+      }
+      addEntityState(zoneState.attributes.show_config);
+      addEntityState(zoneState.attributes.status);
+      addEntityState(zoneState.attributes.next_run);
+      addEntityState(zoneState.attributes.remaining);
+      addEntityState(zoneState.attributes.last_ran);
+      addEntityState(zoneState.attributes.enable_zone);
+      addEntityState(zoneState.attributes.run_freq);
+      addEntityState(zoneState.attributes.default_run_time);
+      addEntityState(zoneState.attributes.water);
+      addEntityState(zoneState.attributes.wait);
+      addEntityState(zoneState.attributes.repeat);
+      addEntityState(zoneState.attributes.flow_sensor);
+      addEntityState(zoneState.attributes.water_adjustment);
+      addEntityState(zoneState.attributes.rain_sensor);
+      addEntityState(zoneState.attributes.water_source_active);
+      addEntityState(zoneState.attributes.ignore_sensors);
+    }
+
+    const snapshot = {};
+    for (const entityId of entityIds) {
+      snapshot[entityId] = this._hass?.states?.[entityId]?.state ?? null;
+    }
+    return snapshot;
   }
 
   _applyCardModToElement() {

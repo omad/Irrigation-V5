@@ -334,6 +334,9 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
     },
   };
 
+  await flushAsyncWork();
+  const initialInnerCard = card._cardElement;
+
   card.hass = {
     states: {
       "switch.program": {
@@ -354,6 +357,7 @@ test("ignores stale async renders so settings rows can appear after toggle", asy
   helperReady.resolve();
   await flushAsyncWork();
 
+  assert.notEqual(card._cardElement, initialInnerCard);
   const conditionalRows = card._cardElement.config.entities.filter((entity) => entity.type === "conditional");
   assert.ok(
     conditionalRows.some(
