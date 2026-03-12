@@ -1,26 +1,110 @@
 class IrrigationCard extends HTMLElement {
+  constructor() {
+    super();
+    this._config = null;
+    this._hass = null;
+    this._cardElement = null;
+    this._cardElementPromise = null;
+  }
 
   setConfig(config) {
-    if (this.lastElementChild) this.removeChild(this.lastElementChild);
     const cardConfig = Object.assign({}, config);
     if (!cardConfig.card) cardConfig.card = {};
     if (!cardConfig.card.type) cardConfig.card.type = "entities";
     if (!cardConfig.entities_vars)
       cardConfig.entities_vars = { type: "entity" };
-    const element = document.createElement('hui-entities-card');
     this._config = JSON.parse(JSON.stringify(cardConfig));
-    customElements.whenDefined("card-mod").then(() => {
-      if (this._config.card_mod?.style) {
-        customElements
-          .get("card-mod")
-          .applyToElement(element, "card-mod-card", this._config.card_mod.style);
-      }
-    });
-    this.appendChild(element);
+    this._ensureCardElement();
+    this._updateCard();
   }
 
   set hass(hass) {
-    const config = this._config;
+    this._hass = hass;
+    this._updateCard();
+  }
+
+  async _ensureCardElement() {
+    if (this._cardElement) {
+      return this._cardElement;
+    }
+    if (this._cardElementPromise) {
+      return this._cardElementPromise;
+    }
+
+    this._cardElementPromise = this._createCardElement();
+    this._cardElement = await this._cardElementPromise;
+    this._cardElementPromise = null;
+    return this._cardElement;
+  }
+
+  async _createCardElement() {
+    let element = null;
+
+    if (window.loadCardHelpers) {
+      try {
+        const helpers = await window.loadCardHelpers();
+        element = helpers.createCardElement({ type: "entities", entities: [] });
+      } catch (error) {
+        console.warn("Irrigation Card: failed to create card with helpers", error);
+      }
+    }
+
+    if (!element) {
+      await customElements.whenDefined("hui-entities-card");
+      element = document.createElement("hui-entities-card");
+    }
+
+    this._replaceCardElement(element);
+    return element;
+  }
+
+  _replaceCardElement(element) {
+    if (this._cardElement && this.contains(this._cardElement)) {
+      this.removeChild(this._cardElement);
+    }
+    this._cardElement = element;
+    this.appendChild(element);
+
+    customElements.whenDefined("card-mod").then(() => {
+      if (this._config?.card_mod?.style && this._cardElement) {
+        customElements
+          .get("card-mod")
+          .applyToElement(this._cardElement, "card-mod-card", this._config.card_mod.style);
+      }
+    });
+  }
+
+  _buildErrorCard(message, title = this._config?.title) {
+    return {
+      ...this._config.card,
+      title,
+      header: this._config.header,
+      footer: this._config.footer,
+      icon: this._config.icon,
+      theme: this._config.theme,
+      show_header_toggle: false,
+      state_color: true,
+      entities: [
+        {
+          type: "section",
+          label: message,
+        },
+      ],
+    };
+  }
+
+  async _updateCard() {
+    if (!this._config || !this._hass) {
+      return;
+    }
+
+    const card = await this._ensureCardElement();
+    if (typeof card?.setConfig !== "function") {
+      console.warn("Irrigation Card: card element is not ready");
+      return;
+    }
+
+    const config = JSON.parse(JSON.stringify(this._config));
     config.card.title = config.title;
     // https://www.home-assistant.io/lovelace/header-footer/
     config.card.header = config.header;
@@ -33,34 +117,32 @@ class IrrigationCard extends HTMLElement {
 
     let zones = [];
     let entities = [];
+    const hasEntity = (entityId) => typeof entityId === "string" && entityId.length > 0 && !!this._hass.states?.[entityId];
 
-    const x = hass.states[config.program];
+    const x = this._hass.states?.[config.program];
     if (!x) {
-      doErrors.push({
-        type: "section",
-        label: "Program: Select a program",
-      });
-      config.card.entities = doErrors;
-      this.lastElementChild.setConfig(config.card);
-      this.lastElementChild.hass = hass;
+      card.setConfig(this._buildErrorCard("Program unavailable or not selected"));
+      card.hass = this._hass;
       return;
     }
 
     if (!x.attributes["zones"]) {
-      doErrors.push({
-        type: "section",
-        label: "Refresh screen (F5)",
-      });
-      config.card.title = "ERROR: " + config.program;
-      config.card.entities = doErrors;
+      card.setConfig(
+        this._buildErrorCard(
+          "Program is still loading its card attributes",
+          "ERROR: " + config.program
+        )
+      );
+      card.hass = this._hass;
+      return;
     } else {
       // console.log("call doRenderProgram()");
-      config.card.entities = doRenderProgram(hass);
+      config.card.entities = doRenderProgram(this._hass);
       // console.log(config.card.entities)
     }
     // console.log("call setConfig");
-    this.lastElementChild.setConfig(config.card);
-    this.lastElementChild.hass = hass;
+    card.setConfig(config.card);
+    card.hass = this._hass;
 
     // Functions
 
@@ -70,6 +152,7 @@ class IrrigationCard extends HTMLElement {
       if (config.show_program === true) {
         let showconfig = hass.states[config.program].attributes["show_config"]
         let programenabled = hass.states[config.program].attributes["irrigation_on"]
+        let pauseEntity = hass.states[config.program].attributes["pause"]
 
         const buttons = [];
         buttons.length = 0;
@@ -78,10 +161,12 @@ class IrrigationCard extends HTMLElement {
           entity: config.program,
           show_name: true,
         });
-        buttons.push({
-          entity: showconfig,
-          show_name: true,
-        });
+        if (hasEntity(showconfig)) {
+          buttons.push({
+            entity: showconfig,
+            show_name: true,
+          });
+        }
         var condition = [{ entity: config.program, state: "off" }];
         entities.push({
           type: "conditional",
@@ -98,14 +183,18 @@ class IrrigationCard extends HTMLElement {
           entity: config.program,
           show_name: true,
         });
-        buttons1.push({
-          entity: showconfig,
-          show_name: true,
-        });
-        buttons1.push({
-          entity: hass.states[config.program].attributes["pause"],
-          show_name: false,
-        });
+        if (hasEntity(showconfig)) {
+          buttons1.push({
+            entity: showconfig,
+            show_name: true,
+          });
+        }
+        if (hasEntity(pauseEntity)) {
+          buttons1.push({
+            entity: pauseEntity,
+            show_name: false,
+          });
+        }
         var condition = [{ entity: config.program, state: "on" }];
         entities.push({
           type: "conditional",
@@ -116,33 +205,37 @@ class IrrigationCard extends HTMLElement {
           }
         });
 
-        var condition = [{ entity: config.program, state_not: "on" }, { entity: showconfig, state_not: "on" }, { entity: programenabled, state: "on" }];
-        add_simple_entity(config.program, condition, "start_time", entities);
-        add_simple_entity(config.program, condition, "default_run_time", entities);
-        var condition = [{ entity: config.program, state_not: "on" }, { entity: showconfig, state_not: "on" }, { entity: programenabled, state_not: "on" }];
-        add_simple_entity(config.program, condition, "irrigation_on", entities);
-        add_simple_entity(config.program, condition, "default_run_time", entities);
-
-        var condition = [{ entity: showconfig, state: "on" }];
-        if (hass.states[config.program].attributes["sunrise"] || hass.states[config.program].attributes["sunset"]) {
+        if (hasEntity(showconfig) && hasEntity(programenabled)) {
+          var condition = [{ entity: config.program, state_not: "on" }, { entity: showconfig, state_not: "on" }, { entity: programenabled, state: "on" }];
           add_simple_entity(config.program, condition, "start_time", entities);
           add_simple_entity(config.program, condition, "default_run_time", entities);
-        } else {
-          add_entity(config.program, condition, "start_time", entities);
-          add_entity(config.program, condition, "default_run_time", entities);
+          var condition = [{ entity: config.program, state_not: "on" }, { entity: showconfig, state_not: "on" }, { entity: programenabled, state_not: "on" }];
+          add_simple_entity(config.program, condition, "irrigation_on", entities);
+          add_simple_entity(config.program, condition, "default_run_time", entities);
+
+          var condition = [{ entity: showconfig, state: "on" }];
+          if (hass.states[config.program].attributes["sunrise"] || hass.states[config.program].attributes["sunset"]) {
+            add_simple_entity(config.program, condition, "start_time", entities);
+            add_simple_entity(config.program, condition, "default_run_time", entities);
+          } else {
+            add_entity(config.program, condition, "start_time", entities);
+            add_entity(config.program, condition, "default_run_time", entities);
+          }
+          add_entity(config.program, condition, "sunrise", entities);
+          add_entity(config.program, condition, "sunset", entities);
         }
-        add_entity(config.program, condition, "sunrise", entities);
-        add_entity(config.program, condition, "sunset", entities);
 
         var condition = [{ entity: config.program, state: "on" }];
         add_entity(config.program, condition, "remaining", entities);
 
-        var condition = [{ entity: showconfig, state: "on" }];
-        add_entity(config.program, condition, "irrigation_on", entities);
-        add_entity(config.program, condition, "run_freq", entities);
-        add_entity(config.program, condition, "inter_zone_delay", entities);
-        add_entity(config.program, condition, "enable_rain_delay", entities);
-        add_entity(config.program, condition, "rain_delay_days", entities);
+        if (hasEntity(showconfig)) {
+          var condition = [{ entity: showconfig, state: "on" }];
+          add_entity(config.program, condition, "irrigation_on", entities);
+          add_entity(config.program, condition, "run_freq", entities);
+          add_entity(config.program, condition, "inter_zone_delay", entities);
+          add_entity(config.program, condition, "enable_rain_delay", entities);
+          add_entity(config.program, condition, "rain_delay_days", entities);
+        }
       }
 
       //add the zones
@@ -201,6 +294,7 @@ class IrrigationCard extends HTMLElement {
         }
 
         let showconfig = hass.states[zone].attributes["show_config"]
+        let zoneStatus = hass.states[zone].attributes["status"]
 
         let btns1 = [];
         btns1.length = 0
@@ -218,20 +312,24 @@ class IrrigationCard extends HTMLElement {
           },
         });
 
-        btns1.push({
-          entity: showconfig,
-          show_name: true,
-        });
+        if (hasEntity(showconfig)) {
+          btns1.push({
+            entity: showconfig,
+            show_name: true,
+          });
+        }
 
-        var condition = [{ entity: hass.states[zone].attributes["status"], state: "off" }];
-        entities.push({
-          type: "conditional",
-          conditions: condition,
-          row: {
-            type: 'buttons',
-            entities: btns1
-          }
-        });
+        if (hasEntity(zoneStatus)) {
+          var condition = [{ entity: zoneStatus, state: "off" }];
+          entities.push({
+            type: "conditional",
+            conditions: condition,
+            row: {
+              type: 'buttons',
+              entities: btns1
+            }
+          });
+        }
 
         let btns = [];
         btns.length = 0
@@ -249,55 +347,68 @@ class IrrigationCard extends HTMLElement {
           },
         });
 
-        btns.push({
-          entity: showconfig,
-          show_name: true,
-        });
+        if (hasEntity(showconfig)) {
+          btns.push({
+            entity: showconfig,
+            show_name: true,
+          });
+        }
 
-        btns.push({
-          entity: hass.states[zone].attributes["status"],
-          show_name: false,
-        });
+        if (hasEntity(zoneStatus)) {
+          btns.push({
+            entity: zoneStatus,
+            show_name: false,
+          });
 
-        var condition = [{ entity: hass.states[zone].attributes["status"], state_not: "off" }];
-        entities.push({
-          type: "conditional",
-          conditions: condition,
-          row: {
-            type: 'buttons',
-            entities: btns
+          var condition = [{ entity: zoneStatus, state_not: "off" }];
+          entities.push({
+            type: "conditional",
+            conditions: condition,
+            row: {
+              type: 'buttons',
+              entities: btns
+            }
+          });
+
+          let zonestatus = zoneStatus
+
+          var condition = [{ entity: zonestatus, state: ["off"] }]
+          add_entity(zone, condition, "next_run", entities)
+
+          condition = [{ entity: zonestatus, state_not: ["off", "on", "pending", "eco"] }]
+          add_entity(zone, condition, "status", entities)
+
+          condition = [{ entity: zonestatus, state: ["on", "eco", "pending"] }]
+          add_entity(zone, condition, "remaining", entities)
+
+          if (hasEntity(showconfig)) {
+            condition = [
+              { entity: zonestatus, state_not: ["on", "eco", "pending"] },
+              { entity: showconfig, state: "on" },
+            ]
+            add_entity(zone, condition, "last_ran", entities)
           }
-        });
+        } else {
+          entities.push({
+            type: "section",
+            label: `Zone status unavailable: ${zone}`,
+          });
+        }
 
-        let zonestatus = hass.states[zone].attributes["status"]
-
-        var condition = [{ entity: zonestatus, state: ["off"] }]
-        add_entity(zone, condition, "next_run", entities)
-
-        condition = [{ entity: zonestatus, state_not: ["off", "on", "pending", "eco"] }]
-        add_entity(zone, condition, "status", entities)
-
-        condition = [{ entity: zonestatus, state: ["on", "eco", "pending"] }]
-        add_entity(zone, condition, "remaining", entities)
-
-        condition = [
-          { entity: zonestatus, state_not: ["on", "eco", "pending"] },
-          { entity: showconfig, state: "on" },
-        ]
-        add_entity(zone, condition, "last_ran", entities)
-
-        condition = [{ entity: showconfig, state: "on" }]
-        add_entity(zone, condition, "enable_zone", entities)
-        add_entity(zone, condition, "run_freq", entities)
-        add_entity(zone, condition, "default_run_time", entities)
-        add_entity(zone, condition, "water", entities)
-        add_entity(zone, condition, "wait", entities)
-        add_entity(zone, condition, "repeat", entities)
-        add_entity(zone, condition, "flow_sensor", entities)
-        add_entity(zone, condition, "water_adjustment", entities)
-        add_entity(zone, condition, "rain_sensor", entities)
-        add_entity(zone, condition, "water_source_active", entities)
-        add_entity(zone, condition, "ignore_sensors", entities)
+        if (hasEntity(showconfig)) {
+          condition = [{ entity: showconfig, state: "on" }]
+          add_entity(zone, condition, "enable_zone", entities)
+          add_entity(zone, condition, "run_freq", entities)
+          add_entity(zone, condition, "default_run_time", entities)
+          add_entity(zone, condition, "water", entities)
+          add_entity(zone, condition, "wait", entities)
+          add_entity(zone, condition, "repeat", entities)
+          add_entity(zone, condition, "flow_sensor", entities)
+          add_entity(zone, condition, "water_adjustment", entities)
+          add_entity(zone, condition, "rain_sensor", entities)
+          add_entity(zone, condition, "water_source_active", entities)
+          add_entity(zone, condition, "ignore_sensors", entities)
+        }
       } //AddZone
 
     } //doRenderProgram
@@ -317,7 +428,7 @@ class IrrigationCard extends HTMLElement {
   }
 
   getCardSize() {
-    return "getCardSize" in this.lastElementChild ? this.lastElementChild.getCardSize() : 1;
+    return this._cardElement && "getCardSize" in this._cardElement ? this._cardElement.getCardSize() : 1;
   }
 }
 

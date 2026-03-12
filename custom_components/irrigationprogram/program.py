@@ -78,6 +78,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         self._unsub_point_in_time = None
         self._unsub_start = None
         self._unsub_monitor = None
+        self._unsub_water_source = None
         self._unsub_pause = None
 
         self._pumps = []
@@ -308,10 +309,15 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
             self._unsub_start()
             self._unsub_start = None
         # stop monitoring
-        self._unsub_monitor()
-        self._unsub_monitor = None
-        self._unsub_pause()
-        self._unsub_pause = None
+        if self._unsub_monitor:
+            self._unsub_monitor()
+            self._unsub_monitor = None
+        if self._unsub_water_source:
+            self._unsub_water_source()
+            self._unsub_water_source = None
+        if self._unsub_pause:
+            self._unsub_pause()
+            self._unsub_pause = None
 
         await self.async_turn_off()
 
@@ -408,6 +414,10 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
     async def async_added_to_hass(self):
         """Add listener."""
+        # Build the card-facing attributes immediately so the frontend does not
+        # race Home Assistant startup and render against an incomplete contract.
+        await self.define_program_attributes()
+
         self._unsub_point_in_time = async_track_point_in_utc_time(
             self._hass, self.point_in_time_listener, self.get_next_interval()
         )
@@ -424,7 +434,8 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
                         pumps[self._program.pump] = [zone]
                     else:
                         pumps[self._program.pump].append(zone)
-            # Build Zone Attributes to support the custom card
+            # Refresh the attributes once HA has fully started in case any
+            # dependent entities were restored late during startup.
             self.hass.async_create_task(self.define_program_attributes())
             # set up to monitor these entities
             await self.set_up_entity_monitoring()
@@ -507,7 +518,7 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
 
         if self._program.water_source and self._program.water_source_pause:
             monitor_append(self._program.water_source, "water_source")
-        self._unsub_monitor = async_track_state_change_event(
+        self._unsub_water_source = async_track_state_change_event(
             self._hass, tuple(monitor), self.pause_program_water_source
         )
 
