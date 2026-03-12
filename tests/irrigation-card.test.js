@@ -118,6 +118,14 @@ function buildEnvironment({ useHelpers = true } = {}) {
   };
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 async function flushAsyncWork() {
   await Promise.resolve();
   await new Promise((resolve) => setImmediate(resolve));
@@ -199,4 +207,123 @@ test("handles partial zone attribute data without throwing", async () => {
 
   assert.ok(Array.isArray(card._cardElement.config.entities));
   assert.equal(card.getCardSize(), 7);
+});
+
+test("ignores stale async renders so settings rows can appear after toggle", async () => {
+  const helperReady = deferred();
+  const registry = new Map();
+
+  const customElements = {
+    define(name, klass) {
+      registry.set(name, klass);
+    },
+    get(name) {
+      return registry.get(name);
+    },
+    whenDefined(name) {
+      if (registry.has(name)) {
+        return Promise.resolve();
+      }
+      return Promise.reject(new Error(`Element not defined: ${name}`));
+    },
+  };
+
+  registry.set("hui-entities-card", FakeEntitiesCard);
+  registry.set("card-mod", class {
+    static applyToElement() {}
+  });
+
+  const context = {
+    HTMLElement: FakeHTMLElement,
+    customElements,
+    document: {
+      createElement(name) {
+        if (name === "hui-entities-card") {
+          return new FakeEntitiesCard();
+        }
+        return new FakeHTMLElement();
+      },
+    },
+    window: {
+      customCards: [],
+      loadCardHelpers: async () => {
+        await helperReady.promise;
+        return {
+          createCardElement: () => new FakeEntitiesCard(),
+        };
+      },
+    },
+    console,
+    Event,
+    Option: class {
+      constructor(text, value) {
+        this.text = text;
+        this.value = value;
+        this.selected = false;
+      }
+    },
+  };
+
+  vm.createContext(context);
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "custom_components", "irrigationprogram", "www", "irrigation-card.js"),
+    "utf8"
+  );
+  vm.runInContext(source, context);
+  const IrrigationCard = customElements.get("irrigation-card");
+
+  const card = new IrrigationCard();
+  card.setConfig({
+    program: "switch.program",
+    entities: [],
+    show_program: true,
+    card: { type: "entities" },
+  });
+
+  card.hass = {
+    states: {
+      "switch.program": {
+        state: "off",
+        attributes: {
+          zones: [],
+          show_config: "switch.program_config",
+          irrigation_on: "switch.program_enabled",
+          start_time: "input_datetime.program_start",
+        },
+      },
+      "switch.program_config": { state: "off", attributes: {} },
+      "switch.program_enabled": { state: "on", attributes: {} },
+      "input_datetime.program_start": { state: "06:00:00", attributes: {} },
+    },
+  };
+
+  card.hass = {
+    states: {
+      "switch.program": {
+        state: "off",
+        attributes: {
+          zones: [],
+          show_config: "switch.program_config",
+          irrigation_on: "switch.program_enabled",
+          start_time: "input_datetime.program_start",
+        },
+      },
+      "switch.program_config": { state: "on", attributes: {} },
+      "switch.program_enabled": { state: "on", attributes: {} },
+      "input_datetime.program_start": { state: "06:00:00", attributes: {} },
+    },
+  };
+
+  helperReady.resolve();
+  await flushAsyncWork();
+
+  const conditionalRows = card._cardElement.config.entities.filter((entity) => entity.type === "conditional");
+  assert.ok(
+    conditionalRows.some(
+      (entity) =>
+        entity.conditions?.some(
+          (condition) => condition.entity === "switch.program_config" && condition.state === "on"
+        )
+    )
+  );
 });

@@ -5,6 +5,7 @@ class IrrigationCard extends HTMLElement {
     this._hass = null;
     this._cardElement = null;
     this._cardElementPromise = null;
+    this._renderVersion = 0;
   }
 
   setConfig(config) {
@@ -98,7 +99,11 @@ class IrrigationCard extends HTMLElement {
       return;
     }
 
+    const renderVersion = ++this._renderVersion;
     const card = await this._ensureCardElement();
+    if (renderVersion !== this._renderVersion) {
+      return;
+    }
     if (typeof card?.setConfig !== "function") {
       console.warn("Irrigation Card: card element is not ready");
       return;
