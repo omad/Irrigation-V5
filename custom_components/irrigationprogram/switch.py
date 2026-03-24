@@ -335,7 +335,7 @@ class EnableProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
         self._init_program_entity(
             unique_id,
             pname,
-            entity_name=program_entity_name("enabled"),
+            entity_name=program_entity_name("schedule enabled"),
             suggested_object_id=program_object_id("enabled"),
         )
 
@@ -389,7 +389,7 @@ class EnableZone(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
         self._init_program_entity(
             unique_id,
             pname,
-            entity_name=zone_entity_name(display_name, "enabled"),
+            entity_name=zone_entity_name(display_name, "included in schedule"),
             suggested_object_id=zone_object_id(zname, "enabled"),
         )
 
