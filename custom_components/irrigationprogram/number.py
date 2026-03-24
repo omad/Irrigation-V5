@@ -179,7 +179,7 @@ class Water(IrrigationProgramEntityMixin, RestoreNumber):
             unique_id,
             pname,
             entity_name=zone_entity_name(
-                zone_display_name, "watering volume" if watering_type == "volume" else "watering time"
+                zone_display_name, "watering volume" if watering_type == "volume" else "duration"
             ),
             suggested_object_id=zone_object_id(zone_name, "water"),
         )

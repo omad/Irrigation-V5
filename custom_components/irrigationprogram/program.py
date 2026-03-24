@@ -285,7 +285,6 @@ class IrrigationProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntit
             condition = [{"entity": zone.config.entity_id, "state": "on"}]
             card += add_entity(zone.enabled, condition)
             card += add_entity(zone.frequency, condition)
-            card += add_entity(zone.default_run_time, condition)
             card += add_entity(zone.water, condition)
             card += add_entity(zone.wait, condition)
             card += add_entity(zone.repeat, condition)

@@ -293,7 +293,7 @@ class ZoneDefaultRunTime(IrrigationProgramEntityMixin, SensorEntity):
         self._init_program_entity(
             unique_id,
             pname,
-            entity_name=zone_entity_name(zone_display_name, "duration"),
+            entity_name=zone_entity_name(zone_display_name, "calculated duration"),
             suggested_object_id=zone_object_id(zone, "duration"),
         )
 
@@ -391,7 +391,7 @@ class DefaultRunTime(IrrigationProgramEntityMixin, SensorEntity):
         self._init_program_entity(
             unique_id,
             pname,
-            entity_name=program_entity_name("duration"),
+            entity_name=program_entity_name("calculated duration"),
             suggested_object_id=program_object_id("duration"),
         )
 

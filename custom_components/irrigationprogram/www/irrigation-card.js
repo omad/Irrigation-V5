@@ -432,7 +432,6 @@ class IrrigationCard extends HTMLElement {
           condition = [{ entity: showconfig, state: "on" }]
           add_entity(zone, condition, "enable_zone", entities)
           add_entity(zone, condition, "run_freq", entities)
-          add_entity(zone, condition, "default_run_time", entities)
           add_entity(zone, condition, "water", entities)
           add_entity(zone, condition, "wait", entities)
           add_entity(zone, condition, "repeat", entities)
