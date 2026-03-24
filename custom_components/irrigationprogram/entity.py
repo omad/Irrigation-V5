@@ -47,6 +47,7 @@ class IrrigationProgramEntityMixin:
         self._device_program_name = program_name
         if entity_name is not None:
             self._attr_name = entity_name
+            self._attr_has_entity_name = False
         if suggested_object_id is not None:
             self._attr_suggested_object_id = suggested_object_id
 

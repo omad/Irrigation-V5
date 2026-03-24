@@ -102,7 +102,7 @@ class IrrigationProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntit
         if dt_util.now() - modified > timedelta(seconds=30):
             return
 
-        def add_entity(object, conditions, simple=False):
+        def add_entity(object, conditions, simple=False, name=None):
             if object:
                 data = ""
                 data += "- type: conditional" + chr(10)
@@ -120,6 +120,8 @@ class IrrigationProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntit
                 if simple:
                     data += "    type: " + "simple-entity" + chr(10)
                 data += "    entity: " + object.entity_id + chr(10)
+                if name:
+                    data += "    name: " + name + chr(10)
 
                 return data
             return ""
@@ -285,7 +287,7 @@ class IrrigationProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntit
             condition = [{"entity": zone.config.entity_id, "state": "on"}]
             card += add_entity(zone.enabled, condition)
             card += add_entity(zone.frequency, condition)
-            card += add_entity(zone.water, condition)
+            card += add_entity(zone.water, condition, name="Duration")
             card += add_entity(zone.wait, condition)
             card += add_entity(zone.repeat, condition)
             card += add_entity_2(self._program.flow_sensor, condition)

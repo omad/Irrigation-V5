@@ -284,26 +284,28 @@ class IrrigationCard extends HTMLElement {
 
       return entities;
 
-      function add_entity(object, conditions = [], entity, array) {
-        if (hass.states[object].attributes[entity]) {
-          array.push({
-            type: "conditional",
-            conditions: conditions,
-            row: {
-              entity: hass.states[object].attributes[entity]
-            },
-          });
-        }
-      } //add_entity
-
-      function add_simple_entity(object, conditions = [], entity, array) {
+      function add_entity(object, conditions = [], entity, array, rowExtras = {}) {
         if (hass.states[object].attributes[entity]) {
           array.push({
             type: "conditional",
             conditions: conditions,
             row: {
               entity: hass.states[object].attributes[entity],
-              type: "simple-entity"
+              ...rowExtras,
+            },
+          });
+        }
+      } //add_entity
+
+      function add_simple_entity(object, conditions = [], entity, array, rowExtras = {}) {
+        if (hass.states[object].attributes[entity]) {
+          array.push({
+            type: "conditional",
+            conditions: conditions,
+            row: {
+              entity: hass.states[object].attributes[entity],
+              type: "simple-entity",
+              ...rowExtras,
             },
           });
         }
@@ -432,7 +434,7 @@ class IrrigationCard extends HTMLElement {
           condition = [{ entity: showconfig, state: "on" }]
           add_entity(zone, condition, "enable_zone", entities)
           add_entity(zone, condition, "run_freq", entities)
-          add_entity(zone, condition, "water", entities)
+          add_entity(zone, condition, "water", entities, { name: "Duration" })
           add_entity(zone, condition, "wait", entities)
           add_entity(zone, condition, "repeat", entities)
           add_entity(zone, condition, "flow_sensor", entities)
