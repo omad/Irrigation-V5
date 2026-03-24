@@ -13,6 +13,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util, slugify
 
 from . import IrrigationProgram
+from .entity import IrrigationProgramEntityMixin, program_entity_name, program_object_id
 
 FMT_TIME = "%H:%M:%S"
 CONF_HAS_DATE = "has_date"
@@ -46,7 +47,7 @@ def parse_initial_datetime(initial) -> py_datetime.datetime:
     raise vol.Invalid(f"Initial value '{initial}' can't be parsed as a time")
 
 
-class starttime(TimeEntity,RestoreEntity):
+class starttime(IrrigationProgramEntityMixin, TimeEntity,RestoreEntity):
 
     _attr_has_entity_name = True
     _attr_translation_key ='start_time'
@@ -58,6 +59,12 @@ class starttime(TimeEntity,RestoreEntity):
         self._native_value     = None
         self._current_datetime = None
         self._attr_attribution = f'Irrigation Controller: {pname}'
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name("start time"),
+            suggested_object_id=program_object_id("start_time"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""

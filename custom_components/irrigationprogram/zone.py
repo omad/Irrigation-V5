@@ -65,13 +65,14 @@ from .const import (
     RAINBIRD_TURN_ON,
     TIME_STR_FORMAT,
 )
+from .entity import IrrigationProgramEntityMixin, zone_entity_name, zone_object_id
 
 VALID_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class Zone(SwitchEntity, RestoreEntity):
+class Zone(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     """Represents the zone."""
 
     _attr_has_entity_name = True
@@ -83,7 +84,7 @@ class Zone(SwitchEntity, RestoreEntity):
         unique_id,
         pname,
         zname,
-        zfriendly_name,
+        zdisplay_name,
         zonedata: IrrigationZoneData,
         programdata: IrrigationProgram,
     ) -> None:
@@ -91,7 +92,13 @@ class Zone(SwitchEntity, RestoreEntity):
         self._attr_unique_id = slugify(f"{unique_id}_{zname}_zone")
         self._attr_attribution = f"Irrigation Controller: {pname} {zname}"
         self._extra_attrs = {}
-        self.translation_placeholders = {"zone_name": f"{zfriendly_name}"}
+        self.translation_placeholders = {"zone_name": f"{zdisplay_name}"}
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zdisplay_name,
+            suggested_object_id=zone_object_id(zname, "switch"),
+        )
         self._programdata = programdata
         self._zonedata = zonedata
         self._rain_stop_count = 0

@@ -14,6 +14,13 @@ from homeassistant.util import slugify
 
 from . import IrrigationData
 from .const import CONST_START_LATENCY
+from .entity import (
+    IrrigationProgramEntityMixin,
+    program_entity_name,
+    program_object_id,
+    zone_entity_name,
+    zone_object_id,
+)
 from .program import IrrigationProgram
 from .zone import Zone
 
@@ -70,19 +77,19 @@ async def async_setup_entry(
         friendly_name = hass.states.get(zone.zone).attributes.get("friendly_name")
         z_name = zone.name
         if zone.rain_sensor or zone.adjustment or data.program.water_source:
-            switch = IgnoreRainSensor(unique_id, name, z_name)
+            switch = IgnoreRainSensor(unique_id, name, zone.display_name, z_name)
             switches.append(switch)
             config_entry.runtime_data.zone_data[i].ignore_sensors = switch
 
-        switch = EnableZone(unique_id, name, z_name)
+        switch = EnableZone(unique_id, name, zone.display_name, z_name)
         config_entry.runtime_data.zone_data[i].enabled = switch
         switches.append(switch)
 
-        switch = ZoneConfig(unique_id, name, z_name)
+        switch = ZoneConfig(unique_id, name, zone.display_name, z_name)
         config_entry.runtime_data.zone_data[i].config = switch
         switches.append(switch)
 
-        switch = Zone(unique_id, name, z_name, friendly_name, zone, data.program)
+        switch = Zone(unique_id, name, z_name, zone.display_name, zone, data.program)
         config_entry.runtime_data.zone_data[i].switch = switch
         switches.append(switch)
     async_add_entities(switches)
@@ -94,7 +101,7 @@ async def async_setup_entry(
     async_add_entities(programs)
 
 
-class ProgramConfig(SwitchEntity, RestoreEntity):
+class ProgramConfig(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     # _attr_translation_key = "config"
     # _attr_has_entity_name = True
     # _unrecorded_attributes = frozenset({MATCH_ALL})
@@ -108,6 +115,12 @@ class ProgramConfig(SwitchEntity, RestoreEntity):
         self._attr_translation_key = "config"
         self._attr_has_entity_name = True
         self._unrecorded_attributes = frozenset({MATCH_ALL})
+        self._init_program_entity(
+            unique_id,
+            name,
+            entity_name=program_entity_name("settings"),
+            suggested_object_id=program_object_id("settings"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -146,7 +159,7 @@ class ProgramConfig(SwitchEntity, RestoreEntity):
         self.async_schedule_update_ha_state()
 
 
-class ProgramPause(SwitchEntity, RestoreEntity):
+class ProgramPause(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "pause"
     _unrecorded_attributes = frozenset({MATCH_ALL})
@@ -157,6 +170,12 @@ class ProgramPause(SwitchEntity, RestoreEntity):
         self._attr_attribution = f"Irrigation Controller: {name}"
         self._state = "off"
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            name,
+            entity_name=program_entity_name("pause"),
+            suggested_object_id=program_object_id("pause"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -190,17 +209,23 @@ class ProgramPause(SwitchEntity, RestoreEntity):
         self.async_schedule_update_ha_state()
 
 
-class ZoneConfig(SwitchEntity, RestoreEntity):
+class ZoneConfig(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "config"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, unique_id, pname, name) -> None:
+    def __init__(self, unique_id, pname, display_name, name) -> None:
         """Initialize a Irrigation program."""
         self._attr_unique_id = slugify(f"{unique_id}_{name}_config")
         self._attr_attribution = f"Irrigation Controller: {pname}, {name}"
         self._state = "off"
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(display_name, "settings"),
+            suggested_object_id=zone_object_id(name, "settings"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -238,17 +263,23 @@ class ZoneConfig(SwitchEntity, RestoreEntity):
         self.async_schedule_update_ha_state()
 
 
-class IgnoreRainSensor(SwitchEntity, RestoreEntity):
+class IgnoreRainSensor(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "ignore_sensor"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, unique_id, pname, name) -> None:
+    def __init__(self, unique_id, pname, display_name, name) -> None:
         """Initialize a Irrigation program."""
         self._attr_unique_id = slugify(f"{unique_id}_{name}_ignore_sensors")
         self._attr_attribution = f"Irrigation Controller: {pname}, {name}"
         self._state = "off"
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(display_name, "ignore sensors"),
+            suggested_object_id=zone_object_id(name, "ignore_sensors"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -286,7 +317,7 @@ class IgnoreRainSensor(SwitchEntity, RestoreEntity):
         self._state = "on"
 
 
-class EnableProgram(SwitchEntity, RestoreEntity):
+class EnableProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "enable_program"
     _unrecorded_attributes = frozenset({MATCH_ALL})
@@ -298,6 +329,12 @@ class EnableProgram(SwitchEntity, RestoreEntity):
         self._state = False
         self._pname = pname
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name("enabled"),
+            suggested_object_id=program_object_id("enabled"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -335,17 +372,23 @@ class EnableProgram(SwitchEntity, RestoreEntity):
         self.async_schedule_update_ha_state()
 
 
-class EnableZone(SwitchEntity, RestoreEntity):
+class EnableZone(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "enable_zone"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, unique_id, pname, zname) -> None:
+    def __init__(self, unique_id, pname, display_name, zname) -> None:
         """Initialize a Irrigation program."""
         self._attr_unique_id = slugify(f"{unique_id}_{zname}_enable_zone")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zname}"
         self._state = False
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(display_name, "enabled"),
+            suggested_object_id=zone_object_id(zname, "enabled"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -378,7 +421,7 @@ class EnableZone(SwitchEntity, RestoreEntity):
         self.async_schedule_update_ha_state()
 
 
-class EnableRainDelay(SwitchEntity, RestoreEntity):
+class EnableRainDelay(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "enable_rain_delay"
     _unrecorded_attributes = frozenset({MATCH_ALL})
@@ -389,6 +432,12 @@ class EnableRainDelay(SwitchEntity, RestoreEntity):
         self._attr_attribution = f"Irrigation Controller: {name}"
         self._state = "off"
         self._unique_id = unique_id
+        self._init_program_entity(
+            unique_id,
+            name,
+            entity_name=program_entity_name("rain delay enabled"),
+            suggested_object_id=program_object_id("rain_delay_enabled"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""

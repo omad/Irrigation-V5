@@ -9,6 +9,13 @@ from homeassistant.util import slugify
 
 from . import IrrigationData, IrrigationProgram
 from .const import CONST_DELAY_OFFSET, CONST_SUN_OFFSET
+from .entity import (
+    IrrigationProgramEntityMixin,
+    program_entity_name,
+    program_object_id,
+    zone_entity_name,
+    zone_object_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,6 +90,7 @@ async def async_setup_entry(
             unique_id,
             p.name,
             zone.name,
+            zone.display_name,
             zone.watering_type,
             p.water_max,
             p.water_step,
@@ -92,18 +100,18 @@ async def async_setup_entry(
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].water = sensor
         if zone.eco:
-            sensor = Wait(unique_id, p.name, zone.name, p.min_sec)
+            sensor = Wait(unique_id, p.name, zone.name, zone.display_name, p.min_sec)
             sensors.append(sensor)
             config_entry.runtime_data.zone_data[i].wait = sensor
 
-            sensor = Repeat(unique_id, p.name, zone.name)
+            sensor = Repeat(unique_id, p.name, zone.name, zone.display_name)
             sensors.append(sensor)
             config_entry.runtime_data.zone_data[i].repeat = sensor
 
     async_add_entities(sensors)
 
 
-class InputNumberProgram(RestoreNumber):
+class InputNumberProgram(IrrigationProgramEntityMixin, RestoreNumber):
     _attr_has_entity_name = True
     _attr_editable = True
     _attr_mode = "slider"
@@ -120,6 +128,12 @@ class InputNumberProgram(RestoreNumber):
         self._attr_native_min_value = min
         self._attr_native_max_value = max
         self._attr_native_step = step
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name(translation_key.replace("_", " ")),
+            suggested_object_id=program_object_id(translation_key),
+        )
 
     async def async_added_to_hass(self):
         last_state = await self.async_get_last_number_data()
@@ -138,7 +152,7 @@ class InputNumberProgram(RestoreNumber):
         self.async_write_ha_state()
 
 
-class Water(RestoreNumber):
+class Water(IrrigationProgramEntityMixin, RestoreNumber):
     _attr_has_entity_name = True
     _attr_editable = True
     _attr_mode = "slider"
@@ -150,6 +164,7 @@ class Water(RestoreNumber):
         unique_id,
         pname,
         zone_name,
+        zone_display_name,
         watering_type,
         water_max=1,
         step=30,
@@ -160,6 +175,14 @@ class Water(RestoreNumber):
         self._attr_native_max_value = water_max
         self._attr_native_step = step
         self._attr_native_min_value = step
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(
+                zone_display_name, "watering volume" if watering_type == "volume" else "watering time"
+            ),
+            suggested_object_id=zone_object_id(zone_name, "water"),
+        )
         if watering_type == "volume":
             self._attr_device_class = NumberDeviceClass.VOLUME
             self._attr_native_unit_of_measurement = "L"
@@ -188,7 +211,7 @@ class Water(RestoreNumber):
         self.async_write_ha_state()
 
 
-class Wait(RestoreNumber):
+class Wait(IrrigationProgramEntityMixin, RestoreNumber):
     _attr_has_entity_name = True
     _attr_editable = True
     _attr_mode = "slider"
@@ -197,10 +220,16 @@ class Wait(RestoreNumber):
     _attr_translation_key = "wait"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, unique_id, pname, zone_name, min_sec="minutes"):
+    def __init__(self, unique_id, pname, zone_name, zone_display_name, min_sec="minutes"):
         self._attr_unique_id = slugify(f"{unique_id}_{zone_name}_wait")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone_name}"
         self._attr_device_class = NumberDeviceClass.DURATION
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "wait time"),
+            suggested_object_id=zone_object_id(zone_name, "wait_time"),
+        )
         if min_sec == "seconds":
             self._attr_native_max_value = 120
             self._attr_native_unit_of_measurement = "s"
@@ -224,7 +253,7 @@ class Wait(RestoreNumber):
         self.async_write_ha_state()
 
 
-class Repeat(RestoreNumber):
+class Repeat(IrrigationProgramEntityMixin, RestoreNumber):
     _attr_has_entity_name = True
     _attr_editable = True
     _attr_mode = "slider"
@@ -234,10 +263,16 @@ class Repeat(RestoreNumber):
     _attr_translation_key = "repeat"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, unique_id, pname, zone_name):
+    def __init__(self, unique_id, pname, zone_name, zone_display_name):
         self._attr_unique_id = slugify(f"{unique_id}_{zone_name}_repeat")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone_name}"
         self._attr_native_unit_of_measurement = "reps"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "repeats"),
+            suggested_object_id=zone_object_id(zone_name, "repeats"),
+        )
 
     async def async_added_to_hass(self):
         last_state = await self.async_get_last_number_data()

@@ -32,6 +32,13 @@ from .const import (
     CONST_UNAVAILABLE,
     CONST_ZONE_DISABLED,
 )
+from .entity import (
+    IrrigationProgramEntityMixin,
+    program_entity_name,
+    program_object_id,
+    zone_entity_name,
+    zone_object_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,30 +68,30 @@ async def async_setup_entry(
     for i, zone in enumerate(zones):
         zname = zone.name
 
-        sensor = ZoneStatus(hass, pname, zname, unique_id)
+        sensor = ZoneStatus(hass, pname, zone.display_name, zname, unique_id)
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].status = sensor
 
-        sensor = ZoneNextRun(hass, pname, zname, unique_id)
+        sensor = ZoneNextRun(hass, pname, zone.display_name, zname, unique_id)
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].next_run = sensor
 
-        sensor = ZoneLastRan(hass, pname, zname, unique_id)
+        sensor = ZoneLastRan(hass, pname, zone.display_name, zname, unique_id)
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].last_ran = sensor
 
-        sensor = ZoneRemainingTime(hass, pname, zname, unique_id)
+        sensor = ZoneRemainingTime(hass, pname, zone.display_name, zname, unique_id)
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].remaining_time = sensor
 
-        sensor = ZoneDefaultRunTime(hass, pname, zname, unique_id)
+        sensor = ZoneDefaultRunTime(hass, pname, zone.display_name, zname, unique_id)
         sensors.append(sensor)
         config_entry.runtime_data.zone_data[i].default_run_time = sensor
 
     async_add_entities(sensors)
 
 
-class ZoneStatus(SensorEntity):
+class ZoneStatus(IrrigationProgramEntityMixin, SensorEntity):
     """Rain factor class defn."""
 
     _attr_device_class = SensorDeviceClass.ENUM
@@ -94,11 +101,17 @@ class ZoneStatus(SensorEntity):
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
     def __init__(  # noqa: D107
-        self, hass: HomeAssistant, pname, zone, unique_id
+        self, hass: HomeAssistant, pname, zone_display_name, zone, unique_id
     ) -> None:
         self._state = "off"
         self._uuid = slugify(f"{unique_id}_{zone}_status")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "status"),
+            suggested_object_id=zone_object_id(zone, "status"),
+        )
 
     async def set_value(self, status="off"):
         """Set the runtime state value."""
@@ -127,11 +140,6 @@ class ZoneStatus(SensorEntity):
         ]
 
     @property
-    def friendly_name(self):
-        """Return a unique_id for this entity."""
-        return self._state
-
-    @property
     def unique_id(self):
         """Return a unique_id for this entity."""
         return self._uuid
@@ -142,7 +150,7 @@ class ZoneStatus(SensorEntity):
         return self._state
 
 
-class ZoneNextRun(SensorEntity):
+class ZoneNextRun(IrrigationProgramEntityMixin, SensorEntity):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -151,10 +159,16 @@ class ZoneNextRun(SensorEntity):
     _attr_translation_key = "zone_next_run"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, hass: HomeAssistant, pname, zone, unique_id) -> None:
+    def __init__(self, hass: HomeAssistant, pname, zone_display_name, zone, unique_id) -> None:
         self._state = None
         self._uuid = slugify(f"{unique_id}_{zone}_next_run")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "next run"),
+            suggested_object_id=zone_object_id(zone, "next_run"),
+        )
 
     async def set_value(self, status=None):
         """Set the runtime state value."""
@@ -172,7 +186,7 @@ class ZoneNextRun(SensorEntity):
         return self._state
 
 
-class ZoneLastRan(RestoreSensor):
+class ZoneLastRan(IrrigationProgramEntityMixin, RestoreSensor):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -181,11 +195,17 @@ class ZoneLastRan(RestoreSensor):
     _attr_translation_key = "zone_last_ran"
     _unrecorded_attributes = frozenset({MATCH_ALL})
 
-    def __init__(self, hass: HomeAssistant, pname, zone, unique_id) -> None:
+    def __init__(self, hass: HomeAssistant, pname, zone_display_name, zone, unique_id) -> None:
         self._state = None
         self._uuid = slugify(f"{unique_id}_{zone}_last_ran")
         self._localtimezone = ZoneInfo(hass.config.time_zone)
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "last ran"),
+            suggested_object_id=zone_object_id(zone, "last_ran"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""
@@ -209,7 +229,7 @@ class ZoneLastRan(RestoreSensor):
         return self._state
 
 
-class ZoneRemainingTime(SensorEntity):
+class ZoneRemainingTime(IrrigationProgramEntityMixin, SensorEntity):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -218,10 +238,16 @@ class ZoneRemainingTime(SensorEntity):
     _unrecorded_attributes = frozenset({MATCH_ALL})
     _attr_device_class = SensorDeviceClass.DATE
 
-    def __init__(self, hass: HomeAssistant, pname, zone, unique_id) -> None:
+    def __init__(self, hass: HomeAssistant, pname, zone_display_name, zone, unique_id) -> None:
         self._state: datetime = time(hour=0, minute=0, second=0)
         self._uuid = slugify(f"{unique_id}_{zone}_remaining_time")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "remaining time"),
+            suggested_object_id=zone_object_id(zone, "remaining_time"),
+        )
 
     async def set_value(self, value):
         """Set the remaining time state value."""
@@ -251,7 +277,7 @@ class ZoneRemainingTime(SensorEntity):
         return self._state.hour * 3600 + self._state.minute * 60 + self._state.second
 
 
-class ZoneDefaultRunTime(SensorEntity):
+class ZoneDefaultRunTime(IrrigationProgramEntityMixin, SensorEntity):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -260,10 +286,16 @@ class ZoneDefaultRunTime(SensorEntity):
     _unrecorded_attributes = frozenset({MATCH_ALL})
     _attr_device_class = SensorDeviceClass.DATE
 
-    def __init__(self, hass: HomeAssistant, pname, zone, unique_id) -> None:
+    def __init__(self, hass: HomeAssistant, pname, zone_display_name, zone, unique_id) -> None:
         self._state: datetime = time(hour=0, minute=0, second=0)
         self._uuid = slugify(f"{unique_id}_{zone}_default_run_time")
         self._attr_attribution = f"Irrigation Controller: {pname}, {zone}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=zone_entity_name(zone_display_name, "duration"),
+            suggested_object_id=zone_object_id(zone, "duration"),
+        )
 
     def set_value(self, value):
         """Set the remaining time state value."""
@@ -293,7 +325,7 @@ class ZoneDefaultRunTime(SensorEntity):
         return self._state.hour * 3600 + self._state.minute * 60 + self._state.second
 
 
-class RemainingTime(SensorEntity):
+class RemainingTime(IrrigationProgramEntityMixin, SensorEntity):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -307,6 +339,12 @@ class RemainingTime(SensorEntity):
         self._state: datetime = time(hour=0, minute=0, second=0)
         self._uuid = slugify(f"{unique_id}_remaining_time")
         self._attr_attribution = f"Irrigation Controller: {pname}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name("remaining time"),
+            suggested_object_id=program_object_id("remaining_time"),
+        )
 
     async def set_value(self, value):
         """Set the runtime state value."""
@@ -336,7 +374,7 @@ class RemainingTime(SensorEntity):
         return self._state.hour * 3600 + self._state.minute * 60 + self._state.second
 
 
-class DefaultRunTime(SensorEntity):
+class DefaultRunTime(IrrigationProgramEntityMixin, SensorEntity):
     """Next zone run date time class defn."""
 
     _attr_has_entity_name = True
@@ -350,6 +388,12 @@ class DefaultRunTime(SensorEntity):
         self._state: datetime = time(hour=0, minute=0, second=0)
         self._uuid = slugify(f"{unique_id}_default_run_time")
         self._attr_attribution = f"Irrigation Controller: {pname}"
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name("duration"),
+            suggested_object_id=program_object_id("duration"),
+        )
 
     def set_value(self, value):
         """Set the runtime state value."""

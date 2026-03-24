@@ -38,12 +38,13 @@ from .const import (
     CONST_PENDING,
     TIME_STR_FORMAT,
 )
+from .entity import IrrigationProgramEntityMixin, program_object_id
 from .pump import PumpClass
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class IrrigationProgram(SwitchEntity, RestoreEntity):
+class IrrigationProgram(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
     """Representation of an Irrigation program."""
 
     _attr_has_entity_name = True
@@ -62,6 +63,12 @@ class IrrigationProgram(SwitchEntity, RestoreEntity):
         self._name = runtime_data.program.name
         self._program: ProgramData = runtime_data.program
         self._zones: list[ZoneData] = runtime_data.zone_data
+        self._init_program_entity(
+            unique_id,
+            self._name,
+            entity_name="Program",
+            suggested_object_id=program_object_id("switch"),
+        )
 
         self.entity_id = async_generate_entity_id(
             ENTITY_ID_FORMAT, device_id, hass=hass

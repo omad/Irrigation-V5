@@ -11,6 +11,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import slugify
 
 from . import IrrigationProgram
+from .entity import IrrigationProgramEntityMixin, program_entity_name, program_object_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ async def async_setup_entry(
         config_entry.runtime_data.program.start_time = sensor
         async_add_entities(entities)
 
-class RunTimes(TextEntity,RestoreEntity):
+class RunTimes(IrrigationProgramEntityMixin, TextEntity,RestoreEntity):
 
     translation_key='start_times'
     has_entity_name=True
@@ -43,6 +44,12 @@ class RunTimes(TextEntity,RestoreEntity):
         self._attr_pattern = '(([0-2][0-9]:[0-5][0-9]:[0-5][0-9])(?:,|$)){1,10}'
         self._current_value = None
         self._default_value = '06:00:00,18:00:00'
+        self._init_program_entity(
+            unique_id,
+            pname,
+            entity_name=program_entity_name("start times"),
+            suggested_object_id=program_object_id("start_times"),
+        )
 
     async def async_added_to_hass(self):
         """HA has started."""

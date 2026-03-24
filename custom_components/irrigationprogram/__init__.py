@@ -87,6 +87,7 @@ class IrrigationZoneData:
     switch: SwitchEntity  # generated object
     type: str  # switch|valve
     name: str
+    display_name: str
     config: SwitchEntity  # generated object
     eco: bool
     watering_type: str
@@ -224,6 +225,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             switch=None,
             type=zone.get(ATTR_ZONE).split(".")[0],
             name=zone.get(ATTR_ZONE).split(".")[1],
+            display_name=zone.get(ATTR_ZONE).split(".")[1],
             config=None,
             eco=zone.get("eco"),
             watering_type=zone.get("watering_type"),
@@ -260,6 +262,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 notification_id="irrigation_device_error",
             )
             continue
+        zone_state = hass.states.get(z.zone)
+        if zone_state is not None:
+            z.display_name = zone_state.attributes.get("friendly_name", z.display_name)
         zone_data.append(z)
         # check if dependant objects are ready
         if z.adjustment:
