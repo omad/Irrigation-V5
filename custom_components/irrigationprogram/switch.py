@@ -8,6 +8,7 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry as MyConfigEntry
 from homeassistant.const import MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import slugify
@@ -114,6 +115,7 @@ class ProgramConfig(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
         self._unique_id = unique_id
         self._attr_translation_key = "config"
         self._attr_has_entity_name = True
+        self._attr_entity_category = EntityCategory.CONFIG
         self._unrecorded_attributes = frozenset({MATCH_ALL})
         self._init_program_entity(
             unique_id,
@@ -220,6 +222,7 @@ class ZoneConfig(IrrigationProgramEntityMixin, SwitchEntity, RestoreEntity):
         self._attr_attribution = f"Irrigation Controller: {pname}, {name}"
         self._state = "off"
         self._unique_id = unique_id
+        self._attr_entity_category = EntityCategory.CONFIG
         self._init_program_entity(
             unique_id,
             pname,
